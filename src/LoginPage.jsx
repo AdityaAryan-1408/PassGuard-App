@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { getAdditionalUserInfo } from 'firebase/auth';
+import { db } from './firebase.js';
+import { doc, setDoc } from "firebase/firestore";
+
 import GoogleIconpng from "./assets/Icons/search.png"
 import LockIconpng from "./assets/Icons/shield.png"
 import EyeIconpng from "./assets/Icons/view.png"
@@ -34,8 +38,12 @@ export default function LoginPage({ onClose, onLoginSuccess }) {
         try {
             if (isSignUp) {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await setDoc(doc(db, "users", userCredential.user.uid), {
+                    masterPasswordIsSet: true
+                });
                 await sendEmailVerification(userCredential.user);
                 alert("Account created! Please check your inbox to verify your email address.");
+                onLoginSuccess(password);
             } else {
                 await signInWithEmailAndPassword(auth, email, password);
                 onLoginSuccess(password);

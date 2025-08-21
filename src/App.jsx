@@ -4,11 +4,15 @@ import { auth } from "./firebase";
 import LoginPage from "./LoginPage";
 import SuccessModal from './SuccessModal.jsx';
 import { db } from './firebase';
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { encryptPassword } from './utils.js';
+import { decryptPassword } from './utils.js';
 import SavedPasswordsPage from "./SavedPasswordsPage.jsx";
 import UnlockPage from "./UnlockPage.jsx";
 import IntroScreen from "./IntroScreen.jsx";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import CreateMasterPasswordPage from "./CreateMasterPasswordPage.jsx";
+
 
 // Icon Imports
 import LockIconpng from "./assets/Icons/shield.png"
@@ -194,8 +198,9 @@ function App() {
   const handleThemeToggle = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
+
   useEffect(() => {
-    const introSeen = sessionStorage.getItem('introSeen')
+    const introSeen = sessionStorage.getItem('introSeen');
     if (introSeen) {
       setShowIntro(false);
     }
@@ -204,19 +209,110 @@ function App() {
   const handleEnter = () => {
     sessionStorage.setItem('introSeen', 'true');
     setShowIntro(false);
-  }
-  return showIntro ? <IntroScreen onEnter={handleEnter} theme={theme} handleThemeToggle={handleThemeToggle} /> :
-    <PassGuard theme={theme} handleThemeToggle={handleThemeToggle} />;
+  };
+
+  return showIntro ?
+    <IntroScreen onEnter={handleEnter} theme={theme} handleThemeToggle={handleThemeToggle} /> :
+    <AppCore theme={theme} handleThemeToggle={handleThemeToggle} />;
 }
 
-function PassGuard({ theme, handleThemeToggle }) {
+
+function AppCore({ theme, handleThemeToggle }) {
+  const { currentUser } = useAuth();
+  const [masterPassword, setMasterPassword] = useState('');
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+  const [userStatus, setUserStatus] = useState('loading');
+
+  useEffect(() => {
+    const checkUserSetup = async () => {
+      if (currentUser) {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists() && docSnap.data().masterPasswordIsSet) {
+          setUserStatus('needsUnlock');
+        } else {
+          setUserStatus('needsSetup');
+        }
+      } else {
+        setUserStatus('loggedOut');
+        setIsVaultUnlocked(false);
+        setMasterPassword('');
+      }
+    };
+    checkUserSetup();
+  }, [currentUser]);
+
+  const handleUnlock = async (password, setError) => {
+    if (!currentUser) {
+      setError("User not found.");
+      return;
+    }
+
+    try {
+      const userDocRef = doc(db, "users", currentUser.uid);
+      const docSnap = await getDoc(userDocRef);
+
+      if (docSnap.exists()) {
+        const encryptedCanary = docSnap.data().verification;
+        if (!encryptedCanary) {
+          setError("Cannot verify password. Account setup may be incomplete.");
+          return;
+        }
+
+        const decryptedCanary = decryptPassword(encryptedCanary, password);
+
+        if (decryptedCanary === 'test_value') {
+          setMasterPassword(password);
+          setIsVaultUnlocked(true);
+          setUserStatus('unlocked');
+        } else {
+          setError("Incorrect Master Password");
+        }
+      } else {
+        setError("User data not found.");
+      }
+    } catch (error) {
+      console.error("Unlock error:", error);
+      setError("Incorrect Master Password");
+    }
+  };
+
+  const handleLoginSuccess = (password) => {
+    setMasterPassword(password);
+    setIsVaultUnlocked(true);
+  };
+
+  if (userStatus === 'loading') {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-900"><LoadingSpinner /></div>;
+  }
+
+  if (userStatus === 'needsSetup') {
+    return <CreateMasterPasswordPage onMasterPasswordSet={(password) => {
+      setMasterPassword(password);
+      setIsVaultUnlocked(true);
+      setUserStatus('unlocked');
+    }} />;
+  }
+
+  if (userStatus === 'needsUnlock') {
+    return <UnlockPage onUnlock={handleUnlock} />;
+  }
+
+  return (
+    <PassGuard
+      theme={theme}
+      handleThemeToggle={handleThemeToggle}
+      masterPassword={masterPassword}
+      isVaultUnlocked={isVaultUnlocked}
+      onLoginSuccess={handleLoginSuccess}
+    />
+  );
+}
+
+function PassGuard({ theme, handleThemeToggle, masterPassword, isVaultUnlocked, onLoginSuccess }) {
 
   const { currentUser } = useAuth();
   const [view, setView] = useState('home');
-
-
-  const [masterPassword, setMasterPassword] = useState('');
-  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -428,12 +524,6 @@ function PassGuard({ theme, handleThemeToggle }) {
 
         <main className="flex-grow flex items-center justify-center p-4">
           {(() => {
-            if (currentUser && !isVaultUnlocked) {
-              return <UnlockPage onUnlock={(password) => {
-                setMasterPassword(password);
-                setIsVaultUnlocked(true);
-              }} />;
-            }
             if (view === 'login' && !currentUser) {
               return <LoginPage
                 onClose={() => setView('home')}
