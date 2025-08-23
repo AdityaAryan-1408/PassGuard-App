@@ -14,7 +14,8 @@ import {
     signInWithEmailAndPassword,
     signInWithPopup,
     GoogleAuthProvider,
-    sendEmailVerification
+    sendEmailVerification,
+    signOut
 } from "firebase/auth";
 import { auth } from './firebase';
 
@@ -30,6 +31,8 @@ export default function LoginPage({ onClose, onLoginSuccess }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
     const handleEmailLogin = async (e) => {
         e.preventDefault();
@@ -37,16 +40,26 @@ export default function LoginPage({ onClose, onLoginSuccess }) {
         setLoading(true);
         try {
             if (isSignUp) {
+                if (password !== confirmPassword) {
+                    setError("Passwords do not match.");
+                    setLoading(false);
+                    return;
+                }
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                await setDoc(doc(db, "users", userCredential.user.uid), {
-                    masterPasswordIsSet: true
-                });
+
                 await sendEmailVerification(userCredential.user);
                 alert("Account created! Please check your inbox to verify your email address.");
-                onLoginSuccess(password);
+                await auth.signOut();
+
             } else {
-                await signInWithEmailAndPassword(auth, email, password);
-                onLoginSuccess(password);
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                if (userCredential.user.emailVerified) {
+                    onLoginSuccess(password);
+                }
+                else {
+                    setError("Please verify your email address before logging in. Check your inbox for a verification link.");
+                    auth.signOut();
+                }
             }
         } catch (err) {
             setError(err.message);
@@ -123,6 +136,29 @@ export default function LoginPage({ onClose, onLoginSuccess }) {
                                 </button>
                             </div>
                         </div>
+                        {isSignUp && (
+                            <div>
+                                <label htmlFor="confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Confirm Password</label>
+                                <div className='relative'>
+                                    <input
+                                        type={isConfirmPasswordVisible ? 'text' : 'password'}
+                                        id="confirm-password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="••••••••••••"
+                                        required
+                                        className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 rounded-lg p-3 focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all duration-300 outline-none pr-10"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500"
+                                    >
+                                        {isConfirmPasswordVisible ? <EyeSlashIcon /> : <EyeIcon />}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         {error && <p className="text-sm text-center text-red-500 dark:text-red-400">{error}</p>}
                         <div>
                             <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-red-500/30 dark:shadow-red-600/30 transform hover:scale-105 transition-all duration-300 disabled:opacity-50">
