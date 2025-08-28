@@ -333,7 +333,6 @@ function PassGuard({ theme, handleThemeToggle, masterPassword, isVaultUnlocked, 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [apiError, setApiError] = useState(null);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -353,71 +352,75 @@ function PassGuard({ theme, handleThemeToggle, masterPassword, isVaultUnlocked, 
   }, [password]);
 
   const filteredServices = commonServices.filter(s => s.toLowerCase().includes(service.toLowerCase()));
-  const callGeminiApi = async (prompt, maxRetries = 3) => {
-    setApiError(null);
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
-    const payload = {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    };
 
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-
-        const result = await response.json();
-
-        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts.length > 0) {
-          return result.candidates[0].content.parts[0].text.trim();
-        } else {
-          throw new Error("Invalid response structure from API.");
-        }
-      } catch (error) {
-        if (i === maxRetries - 1) {
-          console.error("API call failed after multiple retries:", error);
-          setApiError("Failed to contact the AI service. Please try again later.");
-          return null;
-        }
-        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
-      }
-    }
-  };
-
-  const handleGeneratePassword = async () => {
+  const handleGeneratePassword = () => {
     setIsGenerating(true);
-    const prompt = "Generate a highly secure, 16-character random password. It must include a mix of uppercase letters, lowercase letters, numbers, and special characters (like !@#$%^&*). Only return the password text itself, with no other explanation.";
-    const generatedPassword = await callGeminiApi(prompt);
-    if (generatedPassword) {
-      setPassword(generatedPassword);
+
+    const lower = "abcdefghijklmnopqrstuvwxyz";
+    const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const numbers = "0123456789";
+    const symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?";
+    const allChars = lower + upper + numbers + symbols;
+    const length = 16;
+
+    let passwordArray = [];
+
+    passwordArray.push(lower[Math.floor(Math.random() * lower.length)]);
+    passwordArray.push(upper[Math.floor(Math.random() * upper.length)]);
+    passwordArray.push(numbers[Math.floor(Math.random() * numbers.length)]);
+    passwordArray.push(symbols[Math.floor(Math.random() * symbols.length)]);
+
+    for (let i = 4; i < length; i++) {
+      passwordArray.push(allChars[Math.floor(Math.random() * allChars.length)]);
     }
+
+    for (let i = passwordArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [passwordArray[i], passwordArray[j]] = [passwordArray[j], passwordArray[i]]; // Swap
+    }
+
+    setPassword(passwordArray.join(''));
     setIsGenerating(false);
   };
 
-  const handleAnalyzePassword = async () => {
+  const handleAnalyzePassword = () => {
     if (!password) return;
     setIsAnalyzing(true);
-    setAnalysisResult(null);
-    const prompt = `Analyze the strength of this password: "${password}". First, classify its strength as one word: Weak, Medium, or Strong. Then, provide a one-sentence summary and one concrete suggestion. Format the response exactly like this: "Strength: [Classification]. Summary: [Your summary]. Suggestion: [Your suggestion]." Do not repeat the password in your response.`;
-    const analysis = await callGeminiApi(prompt);
 
-    if (analysis) {
-      const strengthMatch = analysis.match(/Strength: (.*?)\./);
-      const summaryMatch = analysis.match(/Summary: (.*?)\./);
-      const suggestionMatch = analysis.match(/Suggestion: (.*)/);
-
-      setAnalysisResult({
-        strength: strengthMatch ? strengthMatch[1].trim() : "Medium",
-        summary: summaryMatch ? summaryMatch[1].trim() : "Could not parse analysis summary.",
-        suggestion: suggestionMatch ? suggestionMatch[1].trim() : "Try making the password longer or adding more character types."
-      });
+    let score = 0;
+    let suggestions = [];
+    if (password.length >= 12) {
+      score += 2;
+    } else if (password.length >= 8) {
+      score += 1;
+    } else {
+      suggestions.push("Make it longer (at least 8 characters).");
     }
+    if (/[a-z]/.test(password)) score++; else suggestions.push("Add lowercase letters.");
+    if (/[A-Z]/.test(password)) score++; else suggestions.push("Add uppercase letters.");
+    if (/[0-9]/.test(password)) score++; else suggestions.push("Add numbers.");
+    if (/[^a-zA-Z0-9]/.test(password)) score++; else suggestions.push("Add special characters.");
+
+
+    let strength = "Weak";
+    let summary = "Your Password seems Week.";
+
+
+    if (score >= 5) {
+      strength = "Strong";
+      summary = "Your Password seems Strong, Make sure to remember it.";
+    } else if (score >= 3) {
+      strength = "Medium";
+      summary = "Your password could be stronger.";
+    }
+
+    setAnalysisResult({
+      strength: strength,
+      summary: summary,
+      suggestion: suggestions.length > 0 ? suggestions.join(' ') : "Looks good!"
+    });
+
     setIsAnalyzing(false);
   };
 
@@ -636,8 +639,6 @@ function PassGuard({ theme, handleThemeToggle, masterPassword, isVaultUnlocked, 
                             )}
                           </div>
                         )}
-
-                        {apiError && <p className="text-sm text-center text-red-600 dark:text-red-400">{apiError}</p>}
 
                         <div className="pt-4">
                           <button
