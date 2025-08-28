@@ -130,7 +130,7 @@ const Footer = () => (
   <footer className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 transition-colors duration-300">
     <div className="container mx-auto py-4 px-6 md:px-10 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Made with ❤️ by <a href="https://github.com/AdityaAryan-1408" target="_blank" rel="noopener noreferrer" className="font-semibold text-red-600 dark:text-red-500 hover:underline">Aditya</a>
+        Made with ❤️ by <a href="https://github.com/AdityaAryan-1408" target="_blank" rel="noopener noreferrer" className="font-semibold text-red-600 dark:text-red-500 hover:underline">Aditya Aryan</a>
       </p>
       <div className="flex space-x-4">
         <a href="https://github.com/AdityaAryan-1408" target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
